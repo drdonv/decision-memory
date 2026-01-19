@@ -72,6 +72,58 @@ def detect_candidates(chunk: str) -> list[dict]:
         return []
     return data["candidates"]
 
+# Turn a candidate into a decision card that we can add to a db
+def extract_decision(candidate: dict, chunk: str) -> dict:
+    client = OpenAI()
+    EXTRACTION_PROMPT = """
+    You are an information extraction engine. You must not invent facts.
+    Only use the provided text. If info is missing, output null or [].
+    Always include citations as direct short quotes from the text.
+
+    Candidate quote:
+    {candidate_quote}
+
+    Context:
+    {context_text}
+
+    Return JSON exactly in this shape:
+    {{
+    "title": "...",
+    "decision": "...",
+    "context": "...",
+    "rationale": "...",
+    "alternatives": ["...", "..."],
+    "risks": ["...", "..."],
+    "owner": null,
+    "decided_at": null,
+    "confidence": 0.0,
+    "citations": [
+        {{"quote": "...", "note": "supports decision"}},
+        {{"quote": "...", "note": "supports rationale"}}
+    ]
+    }}
+
+    Rules:
+    - decision must be one sentence
+    - alternatives/risks can be []
+    - citations must be verbatim quotes from provided text
+    - if not enough support, lower confidence and leave fields empty rather than guessing
+    """
+
+    prompt = EXTRACTION_PROMPT.format(
+        candidate_quote=candidate["quote"],
+        context_text=chunk
+    )
+
+    response = client.responses.create(
+        model='gpt-4o-mini',
+        input=prompt
+    )
+    try:
+        data = json.loads(response.output_text)
+    except json.JSONDecodeError:
+        return {}
+    return data
 
 if __name__ == "__main__":
     extract(sys.argv[1])
