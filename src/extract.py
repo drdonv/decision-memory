@@ -3,11 +3,14 @@ from openai import OpenAI
 import json
 
 def extract(fpath: str):
-    with open(fpath, "r") as f:
+    with open(fpath, "r", encoding="utf-8") as f:
         text = f.read()
     chunks = chunk_text(text)
     for chunk in chunks:
-        print(chunk)
+        candidates = detect_candidates(chunk)
+        for candidate in candidates:
+            decision = extract_decision(candidate, chunk)
+            print(decision)
 
 # Improve chunking with chunk overlapping, paragraph accumulation (till the 2500 char limit)
 
@@ -64,7 +67,7 @@ def detect_candidates(chunk: str) -> list[dict]:
 
     response = client.responses.create(
         model='gpt-4o-mini',
-        input=prompt + chunk
+        input=prompt + "\n\n" + chunk
     )
     try:
         data = json.loads(response.output_text)
