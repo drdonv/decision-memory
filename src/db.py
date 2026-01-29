@@ -12,8 +12,8 @@ def get_conn() -> psycopg.Connection:
     return psycopg.connect(settings.database_url)
 
 
-def init_db() -> None:
-    with get_conn() as conn, conn.cursor() as cur:
+def init_db(conn: psycopg.Connection) -> None:
+    with conn.cursor() as cur:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS sources (
@@ -56,10 +56,11 @@ def init_db() -> None:
             );
             """
         )
-        conn.commit()
+    conn.commit()
 
 
 def insert_source(
+    conn: psycopg.Connection,
     source_type: str,
     raw_text: str,
     source_title: str | None = None,
@@ -67,7 +68,7 @@ def insert_source(
     author: str | None = None,
     created_at: str | None = None,
 ) -> int:
-    with get_conn() as conn, conn.cursor() as cur:
+    with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO sources (source_type, source_title, source_url, author, created_at, raw_text)
@@ -77,18 +78,18 @@ def insert_source(
             (source_type, source_title, source_url, author, created_at, raw_text),
         )
         source_id = cur.fetchone()[0]
-        conn.commit()
         return source_id
 
 
 def insert_chunk(
+    conn: psycopg.Connection,
     source_id: int,
     chunk_index: int,
     chunk_text: str,
     chunk_hash: str,
     embedding: list[float] | None = None,
 ) -> int:
-    with get_conn() as conn, conn.cursor() as cur:
+    with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO source_chunks (source_id, chunk_index, chunk_text, chunk_hash, embedding)
@@ -98,15 +99,15 @@ def insert_chunk(
             (source_id, chunk_index, chunk_text, chunk_hash, json.dumps(embedding)),
         )
         chunk_id = cur.fetchone()[0]
-        conn.commit()
         return chunk_id
 
 
 def insert_decision(
+    conn: psycopg.Connection,
     decision: dict[str, Any],
     embedding: list[float] | None = None,
 ) -> int:
-    with get_conn() as conn, conn.cursor() as cur:
+    with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO decisions (
@@ -130,18 +131,18 @@ def insert_decision(
             ),
         )
         decision_id = cur.fetchone()[0]
-        conn.commit()
         return decision_id
 
 
 def insert_citation(
+    conn: psycopg.Connection,
     decision_id: int,
     source_chunk_id: int,
     quote: str,
     start_char: int | None = None,
     end_char: int | None = None,
 ) -> int:
-    with get_conn() as conn, conn.cursor() as cur:
+    with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO decision_citations (decision_id, source_chunk_id, quote, start_char, end_char)
@@ -151,5 +152,4 @@ def insert_citation(
             (decision_id, source_chunk_id, quote, start_char, end_char),
         )
         citation_id = cur.fetchone()[0]
-        conn.commit()
         return citation_id

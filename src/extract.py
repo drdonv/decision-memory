@@ -7,6 +7,7 @@ from openai import OpenAI
 
 from src.config import settings
 from src.db import (
+    get_conn,
     init_db,
     insert_chunk,
     insert_citation,
@@ -25,48 +26,53 @@ def extract(
     with open(fpath, "r", encoding="utf-8") as f:
         text = f.read()
 
-    init_db()
-    source_id = insert_source(
-        source_type=source_type,
-        source_title=source_title,
-        source_url=source_url,
-        author=author,
-        raw_text=text,
-    )
+    with get_conn() as conn:
+        init_db(conn)
+        results: list[dict] = []
+        with conn.transaction():
+            source_id = insert_source(
+                conn,
+                source_type=source_type,
+                source_title=source_title,
+                source_url=source_url,
+                author=author,
+                raw_text=text,
+            )
 
-    results: list[dict] = []
-    chunks = chunk_text(text)
-    for index, chunk in enumerate(chunks):
-        chunk_hash = hashlib.sha256(chunk.encode("utf-8")).hexdigest()
-        chunk_id = insert_chunk(
-            source_id=source_id,
-            chunk_index=index,
-            chunk_text=chunk,
-            chunk_hash=chunk_hash,
-        )
-        candidates = detect_candidates(chunk)
-        for candidate in candidates:
-            decision = extract_decision(candidate, chunk)
-            if not decision:
-                continue
-            decision_text = " ".join(
-                [
-                    decision.get("decision", ""),
-                    decision.get("context", ""),
-                    decision.get("rationale", ""),
-                ]
-            ).strip()
-            embedding = embed_text(decision_text) if decision_text else None
-            decision_id = insert_decision(decision, embedding=embedding)
-            for citation in decision.get("citations", []):
-                insert_citation(
-                    decision_id=decision_id,
-                    source_chunk_id=chunk_id,
-                    quote=citation.get("quote", ""),
+            chunks = chunk_text(text)
+            for index, chunk in enumerate(chunks):
+                chunk_hash = hashlib.sha256(chunk.encode("utf-8")).hexdigest()
+                chunk_id = insert_chunk(
+                    conn,
+                    source_id=source_id,
+                    chunk_index=index,
+                    chunk_text=chunk,
+                    chunk_hash=chunk_hash,
                 )
-            results.append(decision)
+                candidates = detect_candidates(chunk)
+                for candidate in candidates:
+                    decision = extract_decision(candidate, chunk)
+                    if not decision:
+                        continue
+                    decision_text = " ".join(
+                        [
+                            decision.get("decision", ""),
+                            decision.get("context", ""),
+                            decision.get("rationale", ""),
+                        ]
+                    ).strip()
+                    embedding = embed_text(decision_text) if decision_text else None
+                    decision_id = insert_decision(conn, decision, embedding=embedding)
+                    for citation in decision.get("citations", []):
+                        insert_citation(
+                            conn,
+                            decision_id=decision_id,
+                            source_chunk_id=chunk_id,
+                            quote=citation.get("quote", ""),
+                        )
+                    results.append(decision)
 
-    return results
+        return results
 
 # Improve chunking with chunk overlapping, paragraph accumulation (till the 2500 char limit)
 
