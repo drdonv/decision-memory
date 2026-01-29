@@ -17,8 +17,8 @@ class Settings:
 
 def _load_env() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    load_dotenv(repo_root / "keys.env")
     load_dotenv(repo_root / ".env")
+    load_dotenv(repo_root / "keys.env")
 
 
 def load_settings() -> Settings:
